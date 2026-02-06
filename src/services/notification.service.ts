@@ -1,18 +1,6 @@
 import { http } from './http'
-import type { Notification } from '../types/notification'
+import type { ListNotificationsResponse, UnreadCountResponse } from '../types/notification'
 
-
-export type ListNotificationsResponse = {
-    items: Notification[]
-}
-
-
-export type UnreadCountResponse = {
-    count: number
-}
-
-
-// Agora userId vem do token de autenticação no backend
 export async function listNotifications(userId: string) {
     return http<ListNotificationsResponse>(`/notifications?userId=${userId}`)
 }
