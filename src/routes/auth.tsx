@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { login, register } from '@/services/auth.service'
 import { Bell } from 'lucide-react'
 import { toast } from 'sonner'
-import { registerValidate } from '@/utils/validates'
+import { registerValidate } from '@/utils/validations/register.validate'
 
 export const Route = createFileRoute('/auth')({
   component: AuthPage,
