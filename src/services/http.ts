@@ -1,21 +1,12 @@
-export const API_URL = import.meta.env.VITE_WS_URL || 'http://localhost:3000'
+import { useAuthStore } from "@/stores/auth.store"
 
-function getAuthToken(): string | null {
-  try {
-    const authStorage = localStorage.getItem('auth-storage')
-    if (!authStorage) return null
-    const parsed = JSON.parse(authStorage)
-    return parsed?.state?.token || null
-  } catch {
-    return null
-  }
-}
+export const API_URL = import.meta.env.VITE_WS_URL || 'http://localhost:3000'
 
 export async function http<T>(
     path: string,
     init?: RequestInit,
 ): Promise<T> {
-    const token = getAuthToken()
+    const token = useAuthStore((s) => s.token);
     
     const res = await fetch(`${API_URL}${path}`, {
         ...init,

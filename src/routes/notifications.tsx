@@ -15,22 +15,12 @@ import { isUnread } from '@/utils/notification'
 export const Route = createFileRoute('/notifications')({
   component: NotificationsPage,
   beforeLoad: ({ context }) => {
-    // Redireciona para login se não autenticado
-    const authStorage = localStorage.getItem('auth-storage')
-    if (!authStorage) {
-      throw new Error('Not authenticated')
-    }
-    try {
-      const parsed = JSON.parse(authStorage)
-      if (!parsed?.state?.isAuthenticated) {
-        throw new Error('Not authenticated')
-      }
-    } catch {
+    const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+    if (!isAuthenticated) {
       throw new Error('Not authenticated')
     }
   },
   onError: () => {
-    // Redireciona para auth em caso de erro
     window.location.href = '/auth'
   },
 })
@@ -49,14 +39,12 @@ export function NotificationsPage() {
   const upsert = useNotificationsStore((s) => s.upsert)
   const markAllReadLocal = useNotificationsStore((s) => s.markAllRead)
 
-  // Redireciona se não estiver autenticado
   useEffect(() => {
     if (!user) {
       navigate({ to: '/auth' })
     }
   }, [user, navigate])
 
-  // 1) Carrega histórico
   useEffect(() => {
     if (!user?.id) return
 
