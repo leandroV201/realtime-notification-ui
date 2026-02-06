@@ -29,7 +29,6 @@ message: string
 level: NotificationLevel
 type: NotificationType
 
-
 entityType?: NotificationEntityType | null
 entityId?: string | null
 
@@ -39,4 +38,13 @@ data?: Record<string, any> | null
 
 readAt?: string | null
 createdAt: string
+}
+
+export type ListNotificationsResponse = {
+    items: Notification[]
+}
+
+
+export type UnreadCountResponse = {
+    count: number
 }
