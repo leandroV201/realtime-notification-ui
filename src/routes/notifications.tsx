@@ -11,18 +11,10 @@ import { NotificationList } from '@/components/notifications/NotificationList'
 import { NotificationSkeleton } from '@/components/notifications/NotificationSkeleton'
 import { connectRealtime, disconnectRealtime } from '@/services/realtime.socket'
 import { isUnread } from '@/utils/notification'
+import type { Notification } from '@/types/notification'
 
 export const Route = createFileRoute('/notifications')({
   component: NotificationsPage,
-  beforeLoad: ({ context }) => {
-    const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-    if (!isAuthenticated) {
-      throw new Error('Not authenticated')
-    }
-  },
-  onError: () => {
-    window.location.href = '/auth'
-  },
 })
 
 export function NotificationsPage() {
@@ -53,7 +45,7 @@ export function NotificationsPage() {
     async function run() {
       try {
         setLoading(true)
-        const res = await listNotifications(user!.id)
+        const res = await listNotifications()
         if (!mounted) return
         setAll(res.items)
       } catch (error) {
@@ -81,9 +73,7 @@ export function NotificationsPage() {
 
     const socket = connectRealtime(user.id)
 
-    socket.on('notification', (payload: Notification) => {
-      upsert(payload)
-    })
+    socket.on('notification', (payload) => upsert(payload as Notification))
 
     return () => {
       socket.off('notification')
@@ -103,7 +93,7 @@ export function NotificationsPage() {
     markAllReadLocal()
 
     try {
-      await markAllRead(user.id)
+      await markAllRead()
     } catch (error) {
       console.error('Erro ao marcar todas como lidas:', error)
     }

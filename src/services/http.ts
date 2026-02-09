@@ -1,31 +1,58 @@
-import { useAuthStore } from "@/stores/auth.store"
+import axios, { InternalAxiosRequestConfig } from 'axios';
+import { useAuthStore } from '../stores/auth.store';
 
-export const API_URL = import.meta.env.VITE_WS_URL || 'http://localhost:3000'
-
-export async function http<T>(
-    path: string,
-    init?: RequestInit,
-): Promise<T> {
-    const token = useAuthStore((s) => s.token);
-    
-    const res = await fetch(`${API_URL}${path}`, {
-        ...init,
-        headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            ...(init?.headers || {}),
-        },
-    })
+const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001',
+  withCredentials: true, 
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 
-    if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        throw new Error(text || `HTTP ${res.status}`)
+apiClient.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const token = useAuthStore.getState().accessToken;
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
+    return config;
+  },
+  (error: any) => Promise.reject(error)
+);
 
-    if (res.status === 204) return undefined as T
 
+apiClient.interceptors.response.use(
+  (response: any) => response,
+  async (error: any) => {
+    const originalRequest = error.config;
 
-    return res.json() as Promise<T>
-}
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        
+        const newToken = await useAuthStore.getState().refreshAccessToken();
+
+        if (newToken) {
+          
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+
+          
+          return apiClient(originalRequest);
+        }
+      } catch (refreshError) {
+        
+        window.location.href = '/auth';
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export default apiClient;

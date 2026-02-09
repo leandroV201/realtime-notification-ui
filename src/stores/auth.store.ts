@@ -1,39 +1,209 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import type { User } from '../types/auth'
+import { create } from 'zustand';
+import { io, Socket } from 'socket.io-client';
+import apiClient from '../services/http'; // ✅ CORRIGIDO: Import adicionado
+import type { User } from '../types/auth';
 
 interface AuthState {
-  user: User | null
-  token: string | null
-  isAuthenticated: boolean
+  user: User | null;
+  accessToken: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+  socket: Socket | null;
 
-  setAuth: (user: User, token: string) => void
-  logout: () => void
+  setAuth: (user: User, accessToken: string) => void;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  refreshAccessToken: () => Promise<string | null>;
+  connectWebSocket: () => void;
+  disconnectWebSocket: () => void;
+  clearError: () => void;
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      user: null,
-      token: null,
-      isAuthenticated: false,
+export const useAuthStore = create<AuthState>((set, get) => ({
+  user: null,
+  accessToken: null,
+  isAuthenticated: false,
+  isLoading: false,
+  error: null,
+  socket: null,
 
-      setAuth: (user, token) =>
-        set({
-          user,
-          token,
-          isAuthenticated: true,
-        }),
+  setAuth: (user, accessToken) => {
+    set({
+      user,
+      accessToken,
+      isAuthenticated: true,
+    });
+    
+    get().connectWebSocket();
+  },
 
-      logout: () =>
-        set({
-          user: null,
-          token: null,
-          isAuthenticated: false,
-        }),
-      }),
-    {
-      name: 'auth-storage',
+  login: async (email, password) => {
+    set({ isLoading: true, error: null });
+
+    try {
+      const response = await apiClient.post(
+        '/auth/login',
+        { email, password },
+        { withCredentials: true },
+      );
+
+      const { accessToken, user } = response.data;
+
+      set({
+        accessToken,
+        user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+
+      get().connectWebSocket();
+
+      return { success: true };
+    } catch (error: any) {
+      const errorMessage =
+        error.response?.data?.message || 'Erro ao fazer login';
+
+      set({
+        error: errorMessage,
+        isLoading: false,
+      });
+
+      return { success: false, error: errorMessage };
     }
-  )
-)
+  },
+
+  register: async (name, email, password) => {
+    set({ isLoading: true, error: null });
+
+    try {
+      const response = await apiClient.post(
+        '/auth/register',
+        { name, email, password },
+        { withCredentials: true },
+      );
+
+      const { accessToken, user } = response.data;
+
+      set({
+        accessToken,
+        user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+
+      get().connectWebSocket();
+
+      return { success: true };
+    } catch (error: any) {
+      const errorMessage =
+        error.response?.data?.message || 'Erro ao registrar';
+
+      set({
+        error: errorMessage,
+        isLoading: false,
+      });
+
+      return { success: false, error: errorMessage };
+    }
+  },
+
+  logout: async () => {
+    get().disconnectWebSocket();
+
+    try {
+      await apiClient.post('/auth/logout', {}, { withCredentials: true });
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+    } finally {
+      set({
+        accessToken: null,
+        user: null,
+        isAuthenticated: false,
+        error: null,
+        socket: null,
+      });
+    }
+  },
+
+  refreshAccessToken: async () => {
+    try {
+      const response = await apiClient.post(
+        '/auth/refresh',
+        {},
+        { withCredentials: true },
+      );
+
+      const { accessToken } = response.data;
+
+      set({ accessToken });
+
+      get().disconnectWebSocket();
+      get().connectWebSocket();
+
+      return accessToken;
+    } catch (error) {
+      get().logout();
+      return null;
+    }
+  },
+
+  connectWebSocket: () => {
+    const token = get().accessToken;
+
+    if (!token) {
+      console.warn('[WS] Não é possível conectar sem access token');
+      return;
+    }
+
+    const existingSocket = get().socket;
+    if (existingSocket?.connected) {
+      existingSocket.disconnect();
+    }
+
+    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+    });
+
+    socket.on('connect', () => {
+      console.log('[WS] WebSocket conectado:', socket.id);
+    });
+
+    socket.on('authenticated', (data) => {
+      console.log('[WS] Autenticado com sucesso:', data);
+    });
+
+    socket.on('error', (error) => {
+      console.error('[WS] Erro:', error);
+
+      if (error.message?.includes('Token') || error.message?.includes('inválido')) {
+        console.log('[WS] Token expirado, tentando renovar...');
+        get().refreshAccessToken();
+      }
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('[WS] WebSocket desconectado:', reason);
+    });
+
+    socket.on('notification', (notification) => {
+      console.log('[WS] Nova notificação recebida:', notification);
+    });
+
+    set({ socket });
+  },
+
+  disconnectWebSocket: () => {
+    const socket = get().socket;
+
+    if (socket) {
+      socket.disconnect();
+      set({ socket: null });
+      console.log('[WS] WebSocket desconectado manualmente');
+    }
+  },
+
+  clearError: () => set({ error: null }),
+}));
