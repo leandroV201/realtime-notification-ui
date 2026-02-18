@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuthStore } from '@/stores/auth.store'
-import { login, register } from '@/services/auth.service'
 import { Bell } from 'lucide-react'
 import { toast } from 'sonner'
 import { registerValidate } from '@/utils/validations/register.validate'
@@ -16,8 +15,8 @@ export const Route = createFileRoute('/auth')({
 })
 
 function AuthPage() {
-  const navigate = useNavigate()
-  const setAuth = useAuthStore((s) => s.setAuth)
+  const navigate = useNavigate();
+  const authStore = useAuthStore();
 
   const [loginData, setLoginData] = useState({
     email: '',
@@ -39,16 +38,11 @@ function AuthPage() {
     setLoginLoading(true)
 
     try {
-      const response = await login({
-        email: loginData.email,
-        password: loginData.password,
-      })
-
-      setAuth(response.user, response.token)
-      navigate({ to: '/notifications' })
-    } catch (e: unknown) {
-      const error = e instanceof Error ? JSON.parse(e.message).message : 'Erro ao fazer login';
-      toast.error('Ocorreu um Erro !', {description: error});
+      const response = await authStore.login(loginData.email, loginData.password);
+      if (response.success) navigate({ to: '/notifications' })
+      else {
+        toast.error('Ocorreu um Erro !', { description: response.error });
+      }
     } finally {
       setLoginLoading(false)
     }
@@ -57,24 +51,16 @@ function AuthPage() {
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
 
-    registerValidate(registerData);
+    if(registerValidate(registerData)) {
+      setRegisterLoading(true)
 
-    setRegisterLoading(true)
-
-    try {
-      const response = await register({
-        email: registerData.email,
-        name: registerData.name,
-        password: registerData.password,
-      })
-
-      setAuth(response.user, response.token)
-      navigate({ to: '/notifications' })
-    } catch (e: unknown) {
-      const error = e instanceof Error ? JSON.parse(e.message).message : 'Erro ao fazer login';
-      toast.error('Ocorreu um Erro !', {description: error});
-    } finally {
-      setRegisterLoading(false)
+      try {
+        const response = await authStore.register(registerData.name, registerData.email, registerData.password);
+        if (response.success) navigate({ to: '/notifications' })
+        toast.error('Ocorreu um Erro !', { description: response.error });
+      } finally {
+        setRegisterLoading(false)
+      }
     }
   }
 

@@ -1,31 +1,94 @@
-import { useAuthStore } from "@/stores/auth.store"
+import axios, { InternalAxiosRequestConfig, AxiosError } from 'axios';
+import { useAuthStore } from '../stores/auth.store';
 
-export const API_URL = import.meta.env.VITE_WS_URL || 'http://localhost:3000'
-
-export async function http<T>(
-    path: string,
-    init?: RequestInit,
-): Promise<T> {
-    const token = useAuthStore((s) => s.token);
-    
-    const res = await fetch(`${API_URL}${path}`, {
-        ...init,
-        headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            ...(init?.headers || {}),
-        },
-    })
+const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://api.localhost',
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 30000, 
+});
 
 
-    if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        throw new Error(text || `HTTP ${res.status}`)
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: any) => void;
+}> = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token || '');
+    }
+  });
+
+  isRefreshing = false;
+  failedQueue = [];
+};
+
+
+apiClient.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const token = useAuthStore.getState().accessToken;
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-    if (res.status === 204) return undefined as T
 
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as any;
 
-    return res.json() as Promise<T>
-}
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            if (originalRequest && token) {
+              originalRequest.headers['Authorization'] = `Bearer ${token}`;
+              return apiClient(originalRequest);
+            }
+          })
+          .catch(() => {
+            window.location.href = '/auth';
+            return Promise.reject(error);
+          });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const newToken = await useAuthStore.getState().refreshAccessToken();
+
+        if (newToken) {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          processQueue(null, newToken);
+          return apiClient(originalRequest);
+        }
+      } catch (refreshError) {
+        processQueue(refreshError);
+        window.location.href = '/auth';
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export default apiClient;
