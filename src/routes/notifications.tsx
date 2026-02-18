@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -12,9 +12,20 @@ import { NotificationSkeleton } from '@/components/notifications/NotificationSke
 import { connectRealtime, disconnectRealtime } from '@/services/realtime.socket'
 import { isUnread } from '@/utils/notification'
 import type { Notification } from '@/types/notification'
+import { DialogContent, DialogTrigger } from '@/components/ui/dialog'
+import { SendPage } from './send'
 
 export const Route = createFileRoute('/notifications')({
   component: NotificationsPage,
+  beforeLoad: () => {
+    const { isAuthenticated } = useAuthStore.getState();
+
+    if (!isAuthenticated) {
+      throw redirect({
+        to: '/auth',
+      })
+    }
+  },
 })
 
 export function NotificationsPage() {
@@ -45,16 +56,13 @@ export function NotificationsPage() {
     async function run() {
       try {
         setLoading(true)
-        const res = await listNotifications()
+        // ✅ SEGURANÇA: userId não é passado, extraído do JWT no backend
+        const res = await listNotifications(1, 20)
         if (!mounted) return
         setAll(res.items)
       } catch (error) {
         console.error('Erro ao carregar notificações:', error)
-        // Se erro de autenticação, fazer logout
-        if (error instanceof Error && error.message.includes('401')) {
-          logout()
-          navigate({ to: '/auth' })
-        }
+        // Se erro de autenticação, fazer logout (será feito automaticamente pelo interceptor)
       } finally {
         if (mounted) setLoading(false)
       }
@@ -71,7 +79,7 @@ export function NotificationsPage() {
   useEffect(() => {
     if (!user?.id) return
 
-    const socket = connectRealtime(user.id)
+    const socket = connectRealtime()
 
     socket.on('notification', (payload) => upsert(payload as Notification))
 
@@ -87,12 +95,11 @@ export function NotificationsPage() {
   }, [filter, items])
 
   async function handleMarkAllRead() {
-    if (!user?.id) return
-
     // Otimista
     markAllReadLocal()
 
     try {
+      // ✅ SEGURANÇA: userId não é passado, extraído do JWT no backend
       await markAllRead()
     } catch (error) {
       console.error('Erro ao marcar todas como lidas:', error)
@@ -147,6 +154,9 @@ export function NotificationsPage() {
             <Button variant="secondary" onClick={handleMarkAllRead}>
               Marcar todas como lidas
             </Button>
+            <DialogTrigger asChild>
+              <Button variant="secondary">Enviar mensagem</Button>
+            </DialogTrigger>
           </div>
         </div>
 
@@ -167,6 +177,9 @@ export function NotificationsPage() {
           )}
         </div>
       </div>
+      <DialogContent className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 p-4 min-w-2/4">
+          <SendPage />
+        </DialogContent>
     </div>
   )
 }
