@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { io, Socket } from 'socket.io-client';
-import apiClient from '../services/http'; // ✅ CORRIGIDO: Import adicionado
+import apiClient from '../services/http';
 import type { User } from '../types/auth';
 
 interface AuthState {
@@ -10,6 +10,7 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   socket: Socket | null;
+  isInitialized: boolean;
 
   setAuth: (user: User, accessToken: string) => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
@@ -19,6 +20,7 @@ interface AuthState {
   connectWebSocket: () => void;
   disconnectWebSocket: () => void;
   clearError: () => void;
+  initializeAuth: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -28,6 +30,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   error: null,
   socket: null,
+  isInitialized: false,
 
   setAuth: (user, accessToken) => {
     set({
@@ -35,7 +38,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       accessToken,
       isAuthenticated: true,
     });
-    
+    localStorage.setItem('user', JSON.stringify(user));
     get().connectWebSocket();
   },
 
@@ -115,7 +118,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await apiClient.post('/auth/logout', {}, { withCredentials: true });
     } catch (error) {
-      console.error('Erro ao fazer logout:', error);
     } finally {
       set({
         accessToken: null,
@@ -124,6 +126,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         error: null,
         socket: null,
       });
+      localStorage.removeItem('user');
     }
   },
 
@@ -153,7 +156,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const token = get().accessToken;
 
     if (!token) {
-      console.warn('[WS] Não é possível conectar sem access token');
       return;
     }
 
@@ -162,35 +164,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       existingSocket.disconnect();
     }
 
-    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
+    const socket = io(import.meta.env.VITE_API_URL || 'http://10.86.254.128:3000', {
       auth: { token },
       transports: ['websocket', 'polling'],
     });
 
-    socket.on('connect', () => {
-      console.log('[WS] WebSocket conectado:', socket.id);
-    });
-
-    socket.on('authenticated', (data) => {
-      console.log('[WS] Autenticado com sucesso:', data);
-    });
-
     socket.on('error', (error) => {
-      console.error('[WS] Erro:', error);
 
       if (error.message?.includes('Token') || error.message?.includes('inválido')) {
-        console.log('[WS] Token expirado, tentando renovar...');
         get().refreshAccessToken();
       }
     });
 
-    socket.on('disconnect', (reason) => {
-      console.log('[WS] WebSocket desconectado:', reason);
-    });
-
-    socket.on('notification', (notification) => {
-      console.log('[WS] Nova notificação recebida:', notification);
-    });
 
     set({ socket });
   },
@@ -201,9 +186,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (socket) {
       socket.disconnect();
       set({ socket: null });
-      console.log('[WS] WebSocket desconectado manualmente');
     }
   },
 
   clearError: () => set({ error: null }),
+
+  initializeAuth: async () => {
+    set({ isLoading: true });
+
+    try {
+      
+      const storedUser = localStorage.getItem('user');
+
+      if (storedUser) {
+        set({
+          user: JSON.parse(storedUser),
+          isAuthenticated: false, 
+        });
+
+        
+        try {
+          const newToken = await get().refreshAccessToken();
+          if (newToken) {
+            set({
+              accessToken: newToken,
+              isAuthenticated: true,
+            });
+            set({ isInitialized: true, isLoading: false });
+            return;
+          }
+        } catch (refreshError) {
+          localStorage.removeItem('user');
+          set({
+            accessToken: null,
+            user: null,
+            isAuthenticated: false,
+            isInitialized: true,
+            isLoading: false,
+          });
+          return;
+        }
+      }
+
+      set({ isInitialized: true, isLoading: false });
+    } catch (error) {
+      set({ isInitialized: true, isLoading: false });
+    }
+  },
 }));
