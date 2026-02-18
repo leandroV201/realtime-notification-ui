@@ -1,9 +1,11 @@
 import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-
+import { useEffect } from 'react'
+import { useAuthStore } from '@/stores/auth.store'
 
 import appCss from '../styles.css?url'
 import { Topbar } from '@/components/layout/Topbar'
 import { Toaster } from '@/components/ui/sonner'
+import { Dialog } from '@/components/ui/dialog'
 
 export const Route = createRootRoute({
   head: () => ({
@@ -16,7 +18,7 @@ export const Route = createRootRoute({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'TanStack Start Starter',
+        title: 'Notify',
       },
     ],
     links: [
@@ -31,6 +33,12 @@ export const Route = createRootRoute({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const initializeAuth = useAuthStore((s) => s.initializeAuth);
+
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
+
   return (
     <html lang="en">
       <head>
@@ -38,7 +46,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <Topbar />
-        {children}
+        <Dialog>
+          {children}
+        </Dialog>
         <Scripts />
         <Toaster />
       </body>
