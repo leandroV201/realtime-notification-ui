@@ -4,13 +4,13 @@ import type { Notification } from '../../types/notification'
 import { cn } from '../../utils/cn'
 import { formatRelativeDate } from '../../utils/date'
 import { isUnread } from '../../utils/notification'
+import { markNotificationRead } from '../../services/notification.service'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useNotificationsStore } from '@/stores/notification.store'
 
 function iconByType(type: Notification['type']) {
-  console.log(type);
   switch (type) {
     case 'security':
       return ShieldAlert
@@ -34,6 +34,15 @@ export function NotificationItem({
 
   const unread = isUnread(n)
   const Icon = useMemo(() => iconByType(n.type), [n.type])
+
+  const handleMarkAsRead = async () => {
+    markReadLocal(n.id)
+    try {
+      await markNotificationRead(n.id)
+    } catch (error) {
+      console.error('Erro ao marcar como lido:', error)
+    }
+  }
 
   return (
     <Card
@@ -77,7 +86,7 @@ export function NotificationItem({
                   size="icon"
                   variant="ghost"
                   className="h-8 w-8 opacity-0 transition group-hover:opacity-100"
-                  onClick={() => markReadLocal(n.id)}
+                  onClick={handleMarkAsRead}
                   title="Marcar como lida"
                 >
                   <Check className="h-4 w-4" />
