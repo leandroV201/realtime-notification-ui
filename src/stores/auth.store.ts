@@ -38,7 +38,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       accessToken,
       isAuthenticated: true,
     });
-    localStorage.setItem('user', JSON.stringify(user));
+    window.localStorage.setItem('user', JSON.stringify(user));
     get().connectWebSocket();
   },
 
@@ -126,7 +126,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         error: null,
         socket: null,
       });
-      localStorage.removeItem('user');
+      window.localStorage.removeItem('user');
     }
   },
 
@@ -196,7 +196,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       
-      const storedUser = localStorage.getItem('user');
+      const storedUser = window.localStorage.getItem('user');
 
       if (storedUser) {
         set({
@@ -216,7 +216,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             return;
           }
         } catch (refreshError) {
-          localStorage.removeItem('user');
+          window.localStorage.removeItem('user');
           set({
             accessToken: null,
             user: null,
