@@ -1,132 +1,195 @@
-import React, { memo, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent, CardFooter } from '@/components/ui/card'
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent
+} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getAllUsers } from '@/services/users.service'
-import { createFileRoute } from '@tanstack/react-router'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import {
+  Select,
+  SelectContent,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
 import { UserResponse } from '@/types/users'
 import { Users } from '@/components/notifications/SendUsersList'
 import { sendNotification } from '@/services/events.service'
 import { send } from '@/types/send'
-import { DialogClose } from '@/components/ui/dialog'
+import { toast } from 'sonner'
+import { uploadImage } from '@/services/upload.service'
+import { useAuthStore } from '@/stores/auth.store'
 
 export const Route = createFileRoute('/send')({
   component: SendPage,
-});
+  beforeLoad: () => {
+    const { isAuthenticated } = useAuthStore.getState();
+
+    if (!isAuthenticated) {
+      throw redirect({
+        to: '/auth',
+      })
+    }
+  },
+})
 
 export function SendPage() {
-  const timestamp = new Date().toISOString()
-  const [users, setUsers] = useState<UserResponse[]>([]);
+  const [users, setUsers] = useState<UserResponse[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+
   const [notifyData, setNotifyData] = useState<send>({
     userId: '',
     type: 'info',
     title: '',
     message: '',
     data: {
-      timestamp,
+      timestamp: new Date().toISOString(),
+      url: ''
     },
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  })
 
-  function handleSend(e: React.FormEvent) {
-    e.preventDefault();
-    setIsLoading(true);
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault()
 
-    try {
-      const response = sendNotification(notifyData);
-      console.log(response);
-    } catch (e) {
-      return e;
+    if (!notifyData.userId) {
+      toast.error('Selecione um usuário')
+      return
     }
 
+    setIsLoading(true)
+
+    try {
+      let imageUrl: string | undefined
+
+      if (selectedFile) {
+        const uploadResponse = await uploadImage(selectedFile);
+        notifyData.data.url = uploadResponse.url ?? ''
+      }
+
+      await sendNotification({
+        ...notifyData
+      })
+
+      toast.success('Notificação enviada com sucesso 🚀')
+
+      setSelectedFile(null)
+      setNotifyData({
+        userId: '',
+        type: 'info',
+        title: '',
+        message: '',
+        data: {
+          timestamp: new Date().toISOString(),
+          url: ''
+        },
+      })
+
+    } catch (error) {
+      console.error(error)
+      toast.error('Erro ao enviar notificação')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   useEffect(() => {
-    let cancelled = false;
-
-    getAllUsers()
-      .then(data => {
-        if (!cancelled) {
-          setUsers(data.data);
-        }
-      })
-      .catch(err => {
-        if (!cancelled) {
-          setError(err);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    getAllUsers().then(data => {
+      setUsers(data.data)
+    })
+  }, [])
 
   return (
-    <div className="flex min-h-full  items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 p-4">
-      <div className="w-full max-w-7xl">
-        <Card className="w-full ">
+    <div className="flex min-h-full items-center justify-center bg-gradient-to-br p-4">
+      <div className="w-full max-w-4xl">
+        <Card>
           <CardHeader>
             <CardTitle>Enviar notificação</CardTitle>
             <CardDescription>
               Envie uma nova notificação
             </CardDescription>
           </CardHeader>
+
           <CardContent>
-            <form onSubmit={handleSend}>
-              <div className="flex flex-col gap-6">
-                <div className="grid gap-2">
-                  <Label htmlFor="email">Titulo</Label>
-                  <Input
-                    id="titulo"
-                    type="titulo"
-                    value={notifyData.title}
-                    onChange={(e) => {
-                      setNotifyData({ ...notifyData, title: e.target.value })
-                    }}
-                    placeholder="Titulo"
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <div className="flex items-center">
-                    <Label htmlFor="message">Mensagem</Label>
-                  </div>
-                  <Input id="message" type="message" value={notifyData.message} onChange={(e) => {
-                    setNotifyData({ ...notifyData, message: e.target.value })
-                  }} required />
-                </div>
-                <div>
-                  <Field>
-                    <Select value={notifyData.userId} onValueChange={(value) =>
-                      setNotifyData((prev) => ({ ...prev, userId: value }))
-                    }>
-                      <SelectTrigger className="w-full max-w-48">
-                        <SelectValue placeholder="Selecione Usuario" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <Users users={users} />
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </div>
+            <form onSubmit={handleSend} className="flex flex-col gap-6">
+
+              <div className="grid gap-2">
+                <Label>Título</Label>
+                <Input
+                  value={notifyData.title}
+                  onChange={(e) =>
+                    setNotifyData(prev => ({
+                      ...prev,
+                      title: e.target.value
+                    }))
+                  }
+                  required
+                />
               </div>
-              <DialogClose asChild>
-                <Button type="submit" className="w-full mt-4">
-                  Enviar
-                </Button>
-              </DialogClose>
+
+              <div className="grid gap-2">
+                <Label>Mensagem</Label>
+                <Input
+                  value={notifyData.message}
+                  onChange={(e) =>
+                    setNotifyData(prev => ({
+                      ...prev,
+                      message: e.target.value
+                    }))
+                  }
+                  required
+                />
+              </div>
+
+              {/* 🔥 Upload de imagem */}
+              <div className="grid gap-2">
+                <Label>Imagem (máx 1MB)</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) {
+                      setSelectedFile(e.target.files[0])
+                    }
+                  }}
+                />
+              </div>
+
+              <Field>
+                <Select
+                  value={notifyData.userId}
+                  onValueChange={(value) =>
+                    setNotifyData(prev => ({
+                      ...prev,
+                      userId: value
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um usuário" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <Users users={users} />
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full"
+              >
+                {isLoading ? 'Enviando...' : 'Enviar'}
+              </Button>
+
             </form>
           </CardContent>
-          <CardFooter className="flex-col gap-2">
-          </CardFooter>
         </Card>
       </div>
     </div>

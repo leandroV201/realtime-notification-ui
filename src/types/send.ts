@@ -7,5 +7,6 @@ export type send = {
 }
 
 type data = {
-    timestamp: string
+    timestamp: string,
+    url: string
 }

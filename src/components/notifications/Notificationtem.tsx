@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Check, CircleAlert, Info, ShieldAlert, Sparkles } from 'lucide-react'
+import { Check, CircleAlert, Info, ShieldAlert, Sparkles, View } from 'lucide-react'
 import type { Notification } from '../../types/notification'
 import { cn } from '../../utils/cn'
 import { formatRelativeDate } from '../../utils/date'
@@ -9,6 +9,8 @@ import { markNotificationRead } from '../../services/notification.service'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useNotificationsStore } from '@/stores/notification.store'
+import { SendPage } from '@/routes/send'
+import { Dialog, DialogContent, DialogTrigger } from '../ui/dialog'
 
 function iconByType(type: Notification['type']) {
   switch (type) {
@@ -92,9 +94,32 @@ export function NotificationItem({
                   <Check className="h-4 w-4" />
                 </Button>
               )}
+              {n.data?.url && (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 opacity-0 transition group-hover:opacity-100"
+                      title="Visualizar imagem"
+                    >
+                      <View className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+
+                  <DialogContent className="bg-background p-4 max-w-3xl">
+                    <div className="flex justify-center m-4">
+                      <img
+                        src={n.data.url}
+                        alt="Imagem da notificação"
+                        className="max-h-[70vh] w-auto rounded-lg object-contain"
+                      />
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
             </div>
           </div>
-
           {unread && (
             <div className="mt-2 flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-foreground" />
@@ -106,5 +131,6 @@ export function NotificationItem({
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-foreground/30 to-transparent opacity-0 transition group-hover:opacity-100" />
     </Card>
+
   )
 }

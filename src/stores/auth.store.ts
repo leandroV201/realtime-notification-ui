@@ -39,6 +39,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: true,
     });
     window.localStorage.setItem('user', JSON.stringify(user));
+    window.localStorage.setItem('_auth_init', 'true');
     get().connectWebSocket();
   },
 
@@ -127,6 +128,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         socket: null,
       });
       window.localStorage.removeItem('user');
+      window.localStorage.removeItem('_auth_init');
     }
   },
 
@@ -195,16 +197,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
 
     try {
-      
       const storedUser = window.localStorage.getItem('user');
 
       if (storedUser) {
         set({
           user: JSON.parse(storedUser),
-          isAuthenticated: false, 
+          isAuthenticated: true,
         });
 
-        
         try {
           const newToken = await get().refreshAccessToken();
           if (newToken) {

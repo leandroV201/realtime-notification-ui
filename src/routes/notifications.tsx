@@ -56,13 +56,11 @@ export function NotificationsPage() {
     async function run() {
       try {
         setLoading(true)
-        // ✅ SEGURANÇA: userId não é passado, extraído do JWT no backend
         const res = await listNotifications(1, 20)
         if (!mounted) return
         setAll(res.items)
       } catch (error) {
         console.error('Erro ao carregar notificações:', error)
-        // Se erro de autenticação, fazer logout (será feito automaticamente pelo interceptor)
       } finally {
         if (mounted) setLoading(false)
       }
@@ -75,7 +73,6 @@ export function NotificationsPage() {
     }
   }, [user?.id, setAll, setLoading, logout, navigate])
 
-  // 2) Conecta realtime
   useEffect(() => {
     if (!user?.id) return
 
